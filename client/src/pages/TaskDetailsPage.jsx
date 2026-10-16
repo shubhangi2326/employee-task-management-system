@@ -100,7 +100,7 @@ export const TaskDetailsPage = () => {
             <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#1e293b' }}>{task.title}</h1>
           </div>
 
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <div className="details-header-actions" style={{ display: 'flex', gap: '0.5rem' }}>
             {!isTerminal && (
               <Link to={`/tasks/${task._id}/edit`} className="btn btn-secondary">
                 <Edit3 size={15} /> Edit
@@ -118,13 +118,13 @@ export const TaskDetailsPage = () => {
             Status Progression
           </div>
           
-          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '1rem' }}>
+          <div className="status-progression-row" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '1rem' }}>
             <div>
               Current Status: <strong>{task.status}</strong>
             </div>
 
             {allowedNext.length > 0 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginLeft: 'auto' }}>
+              <div className="status-transition-actions" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginLeft: 'auto' }}>
                 <span style={{ fontSize: '0.825rem', color: '#64748b' }}>Transition to:</span>
                 {allowedNext.map((nextSt) => (
                   <button

@@ -4,3 +4,10 @@ node_modules/
 !.env.example
 logs/
 *.log
+
+# Test & Temporary exports
+*.csv
+*.pdf
+scratch/
+scratch*.js
+inspect*.js

@@ -488,11 +488,31 @@ export const deleteTask = async (req, res, next) => {
   }
 };
 
-// Helper for CSV escaping
-const escapeCSV = (val) => {
-  if (val === null || val === undefined) return '""';
-  let str = String(val).replace(/"/g, '""');
-  return `"${str}"`;
+// Helper to format date strictly to YYYY-MM-DD
+export const formatDateYYYYMMDD = (val) => {
+  if (!val) return '';
+  const date = new Date(val);
+  if (isNaN(date.getTime())) return '';
+  return date.toISOString().split('T')[0];
+};
+
+// Helper to format date for CSV export
+// Exports as ="YYYY-MM-DD" so Excel renders YYYY-MM-DD text without overflowing to ########
+// Returns empty string '' if missing/null/undefined/invalid so Excel cells remain completely blank
+export const formatDateForCSV = (val) => {
+  const ymd = formatDateYYYYMMDD(val);
+  if (!ymd) return '';
+  return `="${ymd}"`;
+};
+
+// Helper for CSV escaping per RFC 4180
+export const escapeCSV = (val) => {
+  if (val === null || val === undefined || val === '') return '';
+  const str = String(val);
+  if (str.startsWith('="') && str.endsWith('"')) {
+    return str;
+  }
+  return `"${str.replace(/"/g, '""')}"`;
 };
 
 // GET /api/tasks/export/csv
@@ -526,9 +546,9 @@ export const exportTasksCSV = async (req, res, next) => {
     const rows = tasks.map(t => {
       const empName = t.assignedEmployee?.fullName || t.assignedEmployeeSnapshot?.fullName || 'N/A';
       const empId = t.assignedEmployee?.employeeId || t.assignedEmployeeSnapshot?.employeeId || 'N/A';
-      const startStr = t.startDate ? new Date(t.startDate).toISOString().split('T')[0] : '';
-      const dueStr = t.dueDate ? new Date(t.dueDate).toISOString().split('T')[0] : '';
-      const compStr = t.completedDate ? new Date(t.completedDate).toISOString().split('T')[0] : '';
+      const startStr = formatDateForCSV(t.startDate);
+      const dueStr = formatDateForCSV(t.dueDate);
+      const compStr = formatDateForCSV(t.completedDate);
       const isTerminal = t.status === 'Completed' || t.status === 'Cancelled';
       const isOverdue = Boolean(t.dueDate && now > new Date(t.dueDate) && !isTerminal);
 
@@ -552,10 +572,11 @@ export const exportTasksCSV = async (req, res, next) => {
 
     const filename = `tasks_export_${new Date().toISOString().replace(/[:.]/g, '-')}.csv`;
 
-    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.status(200).send(csvContent);
   } catch (error) {
     next(error);
   }
 };
+

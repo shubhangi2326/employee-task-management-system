@@ -118,7 +118,7 @@ export const DashboardPage = () => {
                   <tr key={item.employeeId || idx}>
                     <td>
                       <strong>{item.fullName}</strong>
-                      <span style={{ color: '#64748b', fontSize: '0.8rem', marginLeft: '0.5rem' }}>
+                      <span className="workload-employee-meta">
                         ({item.department} &bull; {item.role})
                       </span>
                     </td>

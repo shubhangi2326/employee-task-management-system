@@ -89,7 +89,7 @@ export const EmployeeDetailsPage = () => {
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <div className="details-header-actions" style={{ display: 'flex', gap: '0.5rem' }}>
             <Link to={`/employees/${employee._id}/edit`} className="btn btn-secondary">
               <Edit3 size={15} /> Edit
             </Link>

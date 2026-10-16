@@ -11,6 +11,13 @@ node_modules
 dist
 dist-ssr
 
+# Test & Temporary exports
+*.csv
+*.pdf
+scratch/
+scratch*.js
+inspect*.js
+
 # Environment
 .env
 .env.*

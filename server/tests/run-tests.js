@@ -9,7 +9,14 @@ import {
   validateStatusTransition,
   validateEmployeeDeletion
 } from '../services/businessRules.js';
-import { generateTaskId, buildTaskFilterQuery } from '../controllers/taskController.js';
+import {
+  generateTaskId,
+  buildTaskFilterQuery,
+  formatDateYYYYMMDD,
+  formatDateForCSV,
+  escapeCSV,
+  exportTasksCSV
+} from '../controllers/taskController.js';
 
 dotenv.config();
 
@@ -221,6 +228,154 @@ const runAllTests = async () => {
     const newTaskId = await generateTaskId();
     assert(/^TSK-\d{3,}$/.test(newTaskId),
       `Generated task ID matches format TSK-000 (${newTaskId})`);
+
+    // ----------------------------------------------------
+    // TEST SUITE 6: CSV Export & Date Formatting
+    // ----------------------------------------------------
+    console.log('\n--- 6. Testing CSV Export & Date Formatting ---');
+
+    // 6.1 formatDateYYYYMMDD unit tests
+    assert(formatDateYYYYMMDD(new Date('2026-10-15T00:00:00.000Z')) === '2026-10-15',
+      'formatDateYYYYMMDD formats Date object as YYYY-MM-DD');
+    assert(formatDateYYYYMMDD('2026-09-25') === '2026-09-25',
+      'formatDateYYYYMMDD preserves valid ISO string as YYYY-MM-DD');
+    assert(formatDateYYYYMMDD(null) === '',
+      'formatDateYYYYMMDD returns empty string for null');
+    assert(formatDateYYYYMMDD(undefined) === '',
+      'formatDateYYYYMMDD returns empty string for undefined');
+    assert(formatDateYYYYMMDD('') === '',
+      'formatDateYYYYMMDD returns empty string for empty string');
+    assert(formatDateYYYYMMDD('invalid-date') === '',
+      'formatDateYYYYMMDD returns empty string for invalid date');
+    assert(formatDateYYYYMMDD('########') === '',
+      'formatDateYYYYMMDD returns empty string for ######## string');
+    assert(formatDateYYYYMMDD('Invalid Date') === '',
+      'formatDateYYYYMMDD returns empty string for Invalid Date string');
+
+    // 6.2 formatDateForCSV unit tests
+    assert(formatDateForCSV('2026-09-25') === '="2026-09-25"',
+      'formatDateForCSV formats valid date as Excel text formula ="YYYY-MM-DD"');
+    assert(formatDateForCSV(null) === '',
+      'formatDateForCSV returns empty string for null');
+    assert(formatDateForCSV(undefined) === '',
+      'formatDateForCSV returns empty string for undefined');
+
+    // 6.3 escapeCSV unit tests
+    assert(escapeCSV(null) === '',
+      'escapeCSV returns empty string for null');
+    assert(escapeCSV(undefined) === '',
+      'escapeCSV returns empty string for undefined');
+    assert(escapeCSV('') === '',
+      'escapeCSV returns empty string for empty string');
+    assert(escapeCSV('="2026-09-25"') === '="2026-09-25"',
+      'escapeCSV passes through Excel text formula ="YYYY-MM-DD"');
+    assert(escapeCSV('Test "Quote"') === '"Test ""Quote"""',
+      'escapeCSV escapes double quotes correctly');
+
+    // 6.4 exportTasksCSV integration test
+    let exportedHeaders = {};
+    let exportedStatus = 0;
+    let exportedData = '';
+
+    const mockReq = { query: {} };
+    const mockRes = {
+      setHeader: (name, val) => { exportedHeaders[name.toLowerCase()] = val; },
+      status: (code) => {
+        exportedStatus = code;
+        return {
+          send: (content) => { exportedData = content; }
+        };
+      }
+    };
+
+    await exportTasksCSV(mockReq, mockRes, (err) => {
+      if (err) throw err;
+    });
+
+    assert(exportedStatus === 200, 'CSV export returns HTTP 200');
+    assert(exportedHeaders['content-type'] && exportedHeaders['content-type'].includes('text/csv'),
+      'CSV export returns Content-Type text/csv');
+    assert(exportedHeaders['content-disposition'] && exportedHeaders['content-disposition'].includes('.csv'),
+      'CSV export sets attachment filename header');
+
+    const csvLines = exportedData.split('\r\n').filter(Boolean);
+    const expectedHeader = 'Task ID,Title,Description,Assigned Employee,Employee ID,Department,Priority,Status,Start Date,Due Date,Completed Date,Overdue';
+    assert(csvLines[0] === expectedHeader,
+      'CSV header matches expected columns');
+
+    // Helper to parse a CSV line with quotes
+    const parseCSVLine = (line) => {
+      const result = [];
+      let current = '';
+      let inQuotes = false;
+      for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        if (char === '"') {
+          if (inQuotes && line[i + 1] === '"') {
+            current += '"';
+            i++;
+          } else {
+            inQuotes = !inQuotes;
+          }
+        } else if (char === ',' && !inQuotes) {
+          result.push(current);
+          current = '';
+        } else {
+          current += char;
+        }
+      }
+      result.push(current);
+      return result;
+    };
+
+    const cleanDate = (d) => (d ? d.replace(/^=?"?|"?$/g, '') : '');
+
+    let allStartDatesValid = true;
+    let allDueDatesValid = true;
+    let allCompletedDatesValid = true;
+    let dataRowCount = 0;
+
+    for (let i = 1; i < csvLines.length; i++) {
+      const fields = parseCSVLine(csvLines[i]);
+      if (fields.length < 12) continue;
+      dataRowCount++;
+      const [taskId, title, desc, empName, empId, dept, priority, status, startDate, dueDate, compDate, overdue] = fields;
+
+      const cleanStart = cleanDate(startDate);
+      const cleanDue = cleanDate(dueDate);
+      const cleanComp = cleanDate(compDate);
+
+      // Start Date must be YYYY-MM-DD
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(cleanStart)) {
+        allStartDatesValid = false;
+        console.error(`Invalid Start Date in row ${i} (${taskId}): "${startDate}"`);
+      }
+
+      // Due Date must be YYYY-MM-DD
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(cleanDue)) {
+        allDueDatesValid = false;
+        console.error(`Invalid Due Date in row ${i} (${taskId}): "${dueDate}"`);
+      }
+
+      // Completed Date: must be YYYY-MM-DD if present, otherwise empty string ''
+      // It must NEVER be '########', 'Invalid Date', or 'undefined'
+      if (compDate !== '') {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(cleanComp)) {
+          allCompletedDatesValid = false;
+          console.error(`Invalid Completed Date in row ${i} (${taskId}): "${compDate}"`);
+        }
+      } else {
+        if (compDate === '########' || compDate === 'Invalid Date' || compDate === 'undefined') {
+          allCompletedDatesValid = false;
+          console.error(`Corrupted Completed Date placeholder in row ${i} (${taskId}): "${compDate}"`);
+        }
+      }
+    }
+
+    assert(dataRowCount > 0, `CSV export contains data rows (found ${dataRowCount})`);
+    assert(allStartDatesValid, 'All exported Start Dates are strictly in YYYY-MM-DD format');
+    assert(allDueDatesValid, 'All exported Due Dates are strictly in YYYY-MM-DD format');
+    assert(allCompletedDatesValid, 'Completed Dates are YYYY-MM-DD when completed, and clean empty values when missing');
 
     // Clean up test records
     await Employee.deleteMany({ employeeId: /^TEST-/ });
