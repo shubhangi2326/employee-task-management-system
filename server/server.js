@@ -15,25 +15,46 @@ connectDB();
 
 const app = express();
 
-// Middlewares
+// CORS Configuration
+const configuredClientUrls = (process.env.CLIENT_URL || '')
+  .split(',')
+  .map(url => url.trim().replace(/\/+$/, ''))
+  .filter(Boolean);
 
-const allowedOrigins = [
+const staticAllowedOrigins = new Set([
   'http://localhost:5173',
   'http://127.0.0.1:5173',
+  'http://localhost:4173',
+  'http://localhost:3000',
   'https://roots-employee-task-management.vercel.app',
-  process.env.CLIENT_URL
-].filter(Boolean);
+  ...configuredClientUrls
+]);
 
-app.use(cors({
+// Allow only production domain and preview URLs belonging to this specific project
+const projectPreviewRegex = /^https:\/\/roots-employee-task-management(-[a-z0-9-]+)?\.vercel\.app$/i;
+
+const isAllowedOrigin = (origin) => {
+  if (!origin) return true; // Allow non-browser, same-origin, curl, or server-to-server requests
+  const normalizedOrigin = origin.trim().replace(/\/+$/, '');
+  return staticAllowedOrigins.has(normalizedOrigin) || projectPreviewRegex.test(normalizedOrigin);
+};
+
+const corsOptions = {
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) {
+    if (isAllowedOrigin(origin)) {
       return callback(null, true);
     }
-
-    return callback(new Error(`Origin ${origin} not allowed by CORS`));
+    // Disallow origin gracefully without throwing an unhandled Express 500 error
+    return callback(null, false);
   },
-  credentials: true
-}));
+  credentials: true,
+  methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+  optionsSuccessStatus: 204
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 
 app.use(express.json());
 

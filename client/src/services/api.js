@@ -5,10 +5,12 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
  */
 const request = async (endpoint, options = {}) => {
   const url = `${API_BASE}${endpoint}`;
-  const headers = {
-    'Content-Type': 'application/json',
-    ...(options.headers || {})
-  };
+  const headers = { ...(options.headers || {}) };
+
+  // Only attach Content-Type: application/json when a request body is present
+  if (options.body && !headers['Content-Type'] && !headers['content-type']) {
+    headers['Content-Type'] = 'application/json';
+  }
 
   try {
     const res = await fetch(url, { ...options, headers });
