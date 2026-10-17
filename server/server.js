@@ -16,20 +16,25 @@ connectDB();
 const app = express();
 
 // Middlewares
+
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  'https://roots-employee-task-management.vercel.app',
+  process.env.CLIENT_URL
+].filter(Boolean);
+
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin) return callback(null, true);
-    if (
-      origin.startsWith('http://localhost:') ||
-      origin.startsWith('http://127.0.0.1:') ||
-      origin === process.env.CLIENT_URL
-    ) {
+    if (!origin || allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
+
     return callback(new Error(`Origin ${origin} not allowed by CORS`));
   },
   credentials: true
 }));
+
 app.use(express.json());
 
 if (process.env.NODE_ENV !== 'test') {
